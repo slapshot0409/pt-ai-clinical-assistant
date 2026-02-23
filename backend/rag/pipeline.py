@@ -10,7 +10,6 @@ client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
 
 
 def build_query(pt_input: PTInput) -> str:
-    """Build a search query from PT input."""
     return (
         f"{pt_input.diagnosis} "
         f"{pt_input.healing_stage.value} stage rehabilitation "
@@ -19,7 +18,6 @@ def build_query(pt_input: PTInput) -> str:
 
 
 def build_prompt(pt_input: PTInput, evidence: List[Dict]) -> str:
-    """Build the Claude prompt with retrieved evidence."""
     evidence_text = ""
     for i, doc in enumerate(evidence, 1):
         evidence_text += f"""
@@ -56,6 +54,7 @@ Based ONLY on the evidence above, generate a structured clinical response in the
     "Alternative diagnosis 1 with brief rationale",
     "Alternative diagnosis 2 with brief rationale"
   ],
+  "gold_standard": "A concise 2-3 sentence summary of the current evidence-based gold standard treatment approach for this condition based on the retrieved research, with citation numbers e.g. [1], [2]",
   "special_tests": [
     {{
       "name": "name of special orthopedic test",
@@ -101,12 +100,9 @@ Respond with valid JSON only. No additional text. No markdown. No code fences.
 
 
 def run_rag_pipeline(pt_input: PTInput) -> TreatmentPlanOutput:
-    """Run the full RAG pipeline and return a structured treatment plan."""
-
     query = build_query(pt_input)
     print(f"Searching for evidence: {query}")
 
-    # Dynamic ingestion — if we don't have enough relevant research, fetch it now
     if needs_more_research(query):
         print(f"Insufficient research found — fetching from PubMed for: {pt_input.diagnosis}")
         fresh_articles = fetch_research(pt_input.diagnosis + " physical therapy treatment", max_results=8)
@@ -140,6 +136,7 @@ def run_rag_pipeline(pt_input: PTInput) -> TreatmentPlanOutput:
 
     return TreatmentPlanOutput(
         differential_diagnosis=data["differential_diagnosis"],
+        gold_standard=data["gold_standard"],
         special_tests=[SpecialTest(**t) for t in data["special_tests"]],
         treatment_plan=data["treatment_plan"],
         manual_therapy=[ManualTherapyItem(**m) for m in data["manual_therapy"]],

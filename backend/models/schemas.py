@@ -52,6 +52,7 @@ class SpecialTest(BaseModel):
 
 class TreatmentPlanOutput(BaseModel):
     differential_diagnosis: List[str]
+    gold_standard: str
     special_tests: List[SpecialTest]
     treatment_plan: str
     manual_therapy: List[ManualTherapyItem]

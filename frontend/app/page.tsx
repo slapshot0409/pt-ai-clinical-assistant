@@ -151,6 +151,12 @@ export default function Home() {
               </ol>
             </div>
 
+            {/* Gold Standard */}
+            <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-5">
+              <h3 className="font-semibold text-yellow-800 mb-2">⭐ Evidence-Based Gold Standard</h3>
+              <p className="text-sm text-gray-700 leading-relaxed">{result.gold_standard}</p>
+            </div>
+
             {/* Special Tests */}
             <div>
               <h3 className="font-semibold text-gray-800 mb-3">Recommended Special Tests</h3>
@@ -227,7 +233,7 @@ export default function Home() {
               <p className="text-sm text-gray-700">{result.recovery_timeline}</p>
             </div>
 
-            {/* Evidence Citations - numbered with anchors */}
+            {/* Evidence Citations */}
             <div>
               <h3 className="font-semibold text-gray-800 mb-2">Evidence Citations</h3>
               <div className="space-y-2">
