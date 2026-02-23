@@ -5,24 +5,37 @@ An AI-powered Physical Therapy Clinical Decision Support System that generates e
 ## Live Application
 
 - **Frontend:** https://prompt-frontend-ten.vercel.app
-- **Backend:** https://prompt-backend.fly.dev
+- **Backend API:** https://prompt-backend.fly.dev
+
+---
 
 ## Overview
 
-Physical therapists input patient data and the system retrieves relevant clinical evidence from PubMed, embeds it using Voyage AI, and generates structured, cited clinical recommendations using Claude AI. The system will never hallucinate medical recommendations without evidence citations.
+Physical therapists input patient assessment data and promPT:
+1. Searches a vector database of 298+ peer-reviewed research articles
+2. Automatically fetches new research from PubMed if the condition is not yet in the database
+3. Prioritizes systematic reviews and RCTs over lower-quality evidence
+4. Generates structured, cited clinical recommendations using Claude AI
+5. Never hallucinates — every recommendation is grounded in retrieved evidence
 
-## Features
+---
 
-- **Differential Diagnosis** — lettered list of possible diagnoses with rationale
-- **Evidence-Based Gold Standard** — concise summary of the current gold standard treatment approach based on retrieved research
-- **Recommended Special Tests** — orthopedic tests with procedure, positive findings, and clinical significance
-- **Treatment Plan** — evidence-based narrative with numbered citations
-- **Manual Therapy** — specific techniques with target tissue and rationale
-- **Exercise Protocol** — detailed step-by-step exercise instructions with sets, reps, frequency
-- **Progression Criteria** — objective criteria for advancing treatment
-- **Contraindications** — safety considerations
-- **Recovery Timeline** — patient-specific expected recovery
-- **Evidence Citations** — numbered, clickable links to supporting PubMed research
+## Clinical Output Sections
+
+| Section | Description |
+|---|---|
+| Differential Diagnosis | Lettered list of possible diagnoses with rationale |
+| Evidence-Based Gold Standard ⭐ | Current best-practice summary from highest-quality evidence |
+| Recommended Special Tests | Orthopedic tests with procedure, positive findings, and significance |
+| Treatment Plan | Evidence-based narrative with numbered citations |
+| Manual Therapy | Specific techniques with target tissue and rationale |
+| Exercise Protocol | Step-by-step exercise instructions with sets, reps, frequency |
+| Progression Criteria | Objective criteria for advancing treatment |
+| Contraindications | Safety considerations |
+| Recovery Timeline | Patient-specific expected recovery |
+| Evidence Citations | Numbered, clickable links to PubMed research |
+
+---
 
 ## Clinical Input Fields
 
@@ -35,29 +48,57 @@ Physical therapists input patient data and the system retrieves relevant clinica
 - Pain Level (0-10)
 - Constraints
 
-## Evidence Sources
+---
 
-- PubMed (via NCBI E-utilities API)
-- 156+ research articles across 20 common PT conditions
-- Dynamic ingestion — automatically fetches new research for unknown conditions
-- Duplicate prevention — never stores the same article twice
+## Research Database
+
+- **298+ articles** across 20 common PT conditions
+- **Evidence quality breakdown:**
+  - Systematic Reviews: 73
+  - RCTs: 28
+  - Clinical Trials: 12
+  - Standard Articles: 185
+- **Dynamic ingestion** — automatically fetches from PubMed when a new condition is encountered
+- **Evidence scoring** — results ranked by combining similarity score (70%) and evidence quality (30%)
+- **Duplicate prevention** — never stores the same article twice
+
+### Evidence Quality Hierarchy
+```
+Systematic Review / Meta-Analysis  ← highest priority
+        ↓
+Randomized Controlled Trial (RCT)
+        ↓
+Clinical Trial
+        ↓
+Observational Study
+        ↓
+Standard Article                   ← lowest priority
+```
+
+---
 
 ## Architecture
 ```
-PT Input Form (Next.js)
-       ↓
+PT Input Form (Next.js / Vercel)
+         ↓
 FastAPI Backend (Fly.io)
-       ↓
+         ↓
 RAG Pipeline
-       ↓
-Voyage AI Embeddings
-       ↓
+    ↓           ↓
+PubMed      High-Quality PubMed
+(standard)  (RCTs + Systematic Reviews)
+         ↓
+Voyage AI Embeddings (voyage-large-2)
+         ↓
 Supabase Vector Database (pgvector)
-       ↓
+Evidence Quality Re-ranking
+         ↓
 Claude AI (claude-opus-4-5)
-       ↓
+         ↓
 Structured Clinical Output
 ```
+
+---
 
 ## Stack
 
@@ -66,12 +107,14 @@ Structured Clinical Output
 | Backend | Python 3.11, FastAPI |
 | Frontend | Next.js 16, React, Tailwind CSS |
 | Database | PostgreSQL via Supabase |
-| Vector DB | Supabase Vector (pgvector) |
+| Vector DB | Supabase pgvector |
 | Embeddings | Voyage AI (voyage-large-2) |
 | AI Generation | Anthropic Claude (claude-opus-4-5) |
-| Research API | PubMed NCBI E-utilities |
+| Research Sources | PubMed NCBI E-utilities (standard + high-quality filter) |
 | Backend Hosting | Fly.io |
 | Frontend Hosting | Vercel |
+
+---
 
 ## Project Structure
 ```
@@ -79,33 +122,37 @@ pt-ai-clinical-assistant/
 ├── backend/
 │   ├── app/
 │   │   ├── api/
-│   │   │   └── analyze.py      # POST /api/v1/analyze endpoint
+│   │   │   └── analyze.py          # POST /api/v1/analyze endpoint
 │   │   └── core/
-│   │       └── config.py       # Environment variable management
+│   │       └── config.py           # Environment variable management
 │   ├── ingestion/
-│   │   └── pubmed.py           # PubMed research fetching
+│   │   ├── pubmed.py               # Standard PubMed ingestion
+│   │   └── pedro.py                # High-quality RCT/systematic review ingestion
 │   ├── models/
-│   │   └── schemas.py          # Pydantic data models
+│   │   └── schemas.py              # Pydantic data models
 │   ├── rag/
-│   │   ├── embeddings.py       # Voyage AI embedding
-│   │   ├── pipeline.py         # RAG pipeline with dynamic ingestion
-│   │   └── vectorstore.py      # Supabase vector storage and search
-│   ├── Dockerfile              # Docker configuration for Fly.io
-│   ├── fly.toml                # Fly.io deployment configuration
-│   └── main.py                 # FastAPI entry point
+│   │   ├── embeddings.py           # Voyage AI embeddings
+│   │   ├── pipeline.py             # RAG pipeline with dual-source dynamic ingestion
+│   │   └── vectorstore.py          # Supabase vector storage with evidence re-ranking
+│   ├── Dockerfile                  # Docker configuration for Fly.io
+│   ├── fly.toml                    # Fly.io deployment configuration
+│   └── main.py                     # FastAPI entry point
 ├── frontend/
 │   ├── app/
-│   │   └── page.tsx            # PT input form and results display
-│   ├── vercel.json             # Vercel deployment configuration
-│   └── .env.production         # Production environment variables
+│   │   └── page.tsx                # PT input form and results display
+│   ├── vercel.json                 # Vercel deployment configuration
+│   └── .env.production             # Production environment variables
 ├── scripts/
-│   ├── bulk_ingest.py          # Bulk PubMed ingestion script
-│   ├── test_pubmed.py          # PubMed ingestion test
-│   ├── test_rag.py             # RAG pipeline test
-│   └── test_vectorstore.py     # Vector store test
+│   ├── bulk_ingest.py              # Bulk PubMed ingestion for 20 conditions
+│   ├── weekly_refresh.py           # Weekly research refresh script
+│   ├── test_pubmed.py              # PubMed ingestion test
+│   ├── test_rag.py                 # RAG pipeline test
+│   └── test_vectorstore.py         # Vector store test
 └── docs/
-    └── ARCHITECTURE.md         # System architecture documentation
+    └── ARCHITECTURE.md             # System architecture documentation
 ```
+
+---
 
 ## Environment Variables
 
@@ -117,6 +164,8 @@ SUPABASE_URL=your_supabase_project_url
 SUPABASE_KEY=your_supabase_service_role_key
 DATABASE_URL=your_database_url
 ```
+
+---
 
 ## Running Locally
 
@@ -135,12 +184,16 @@ npx next dev -p 3000
 
 Visit `http://localhost:3000`
 
+---
+
 ## API Endpoints
 
 | Method | Endpoint | Description |
 |---|---|---|
 | GET | /api/v1/health | Health check |
-| POST | /api/v1/analyze | Submit PT input, receive treatment plan |
+| POST | /api/v1/analyze | Submit PT assessment, receive treatment plan |
+
+---
 
 ## Deployment
 
@@ -156,6 +209,15 @@ cd frontend
 vercel --prod
 ```
 
+### Weekly Research Refresh
+```bash
+cd backend
+source venv/bin/activate
+python3 ../scripts/weekly_refresh.py
+```
+
+---
+
 ## Development Phases
 
 - ✅ Phase 1 — GitHub repository and project scaffold
@@ -168,6 +230,17 @@ vercel --prod
 - ✅ Phase 8 — Frontend/backend integration
 - ✅ Phase 9 — Bulk research ingestion and dynamic fetching
 - ✅ Phase 10 — Production deployment (Fly.io + Vercel)
+- ✅ Phase 11 — High-quality evidence ingestion and evidence quality scoring
+
+## Planned Features
+
+- RBAC with Clerk (user authentication and roles)
+- Save and review past patient sessions
+- PDF export of treatment plans
+- Mobile-optimized UI
+- Automated weekly research refresh via cron job
+
+---
 
 ## License
 
