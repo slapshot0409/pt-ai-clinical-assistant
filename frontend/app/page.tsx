@@ -37,7 +37,7 @@ export default function Home() {
         constraints: form.constraints.split(",").map((s) => s.trim()).filter(Boolean),
       };
 
-      const res = await fetch("http://localhost:8000/api/v1/analyze", {
+      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/v1/analyze`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
