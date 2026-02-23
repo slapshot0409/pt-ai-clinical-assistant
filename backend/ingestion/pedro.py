@@ -3,6 +3,10 @@ import xml.etree.ElementTree as ET
 from typing import List, Dict
 import time
 
+# PEDro doesn't have a public API, so we use PubMed with filters
+# that target the same high-quality study types PEDro indexes:
+# RCTs, systematic reviews, and clinical practice guidelines in physiotherapy
+
 PUBMED_SEARCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
 PUBMED_FETCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
 
@@ -10,7 +14,6 @@ PUBMED_FETCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
 def classify_evidence_level(title: str, abstract: str) -> str:
     """Classify evidence level based on study type keywords."""
     text = (title + " " + abstract).lower()
-
     if any(k in text for k in ["systematic review", "meta-analysis", "cochrane"]):
         return "systematic_review"
     elif any(k in text for k in ["randomized controlled", "randomised controlled", "rct", "randomized trial"]):
@@ -23,19 +26,30 @@ def classify_evidence_level(title: str, abstract: str) -> str:
         return "standard"
 
 
-def search_pubmed(query: str, max_results: int = 8) -> List[str]:
-    """Search PubMed and return list of PMIDs."""
+def search_high_quality_pubmed(query: str, max_results: int = 10) -> List[str]:
+    """Search PubMed filtered to RCTs and systematic reviews only."""
+    # Filter to only return systematic reviews and RCTs in physiotherapy
+    filtered_query = (
+        f"({query}) AND "
+        f"(physical therapy[MeSH] OR physiotherapy[tiab] OR rehabilitation[MeSH]) AND "
+        f"(systematic review[pt] OR randomized controlled trial[pt] OR "
+        f"meta-analysis[pt] OR clinical practice guideline[pt])"
+    )
+
     params = {
         "db": "pubmed",
-        "term": query,
+        "term": filtered_query,
         "retmax": max_results,
         "retmode": "json",
         "sort": "relevance",
     }
+
     response = requests.get(PUBMED_SEARCH_URL, params=params, timeout=15)
     response.raise_for_status()
     data = response.json()
-    return data["esearchresult"]["idlist"]
+    ids = data["esearchresult"]["idlist"]
+    print(f"Found {len(ids)} high-quality articles for: {query}")
+    return ids
 
 
 def fetch_abstracts(pubmed_ids: List[str]) -> List[Dict]:
@@ -49,6 +63,7 @@ def fetch_abstracts(pubmed_ids: List[str]) -> List[Dict]:
         "retmode": "xml",
         "rettype": "abstract",
     }
+
     response = requests.get(PUBMED_FETCH_URL, params=params, timeout=15)
     response.raise_for_status()
 
@@ -86,29 +101,33 @@ def fetch_abstracts(pubmed_ids: List[str]) -> List[Dict]:
             evidence_level = classify_evidence_level(title, abstract)
 
             articles.append({
-                "pmid": pmid,
+                "pmid": f"hq_{pmid}",  # prefix to distinguish from standard pubmed
                 "title": title,
                 "abstract": abstract,
                 "authors": authors,
                 "year": year,
                 "url": url,
-                "source": "PubMed",
+                "source": "PubMed (High Quality)",
                 "evidence_level": evidence_level,
             })
         except Exception as e:
             print(f"Error parsing article: {e}")
             continue
 
-    print(f"Fetched {len(articles)} abstracts")
     return articles
 
 
-def fetch_research(query: str, max_results: int = 8) -> List[Dict]:
-    """Main function to fetch PubMed research."""
-    print(f"Searching PubMed for: {query}")
-    pubmed_ids = search_pubmed(query, max_results)
-    print(f"Found {len(pubmed_ids)} articles")
-    if not pubmed_ids:
+def fetch_pedro_research(query: str, max_results: int = 10) -> List[Dict]:
+    """Fetch high-quality PT research (RCTs + systematic reviews) via PubMed filters."""
+    print(f"Searching for high-quality PT research: {query}")
+    try:
+        ids = search_high_quality_pubmed(query, max_results)
+        if not ids:
+            return []
+        time.sleep(0.5)
+        articles = fetch_abstracts(ids)
+        print(f"Fetched {len(articles)} high-quality articles")
+        return articles
+    except Exception as e:
+        print(f"High-quality search error: {e}")
         return []
-    time.sleep(0.5)
-    return fetch_abstracts(pubmed_ids)

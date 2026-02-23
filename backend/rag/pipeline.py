@@ -4,6 +4,7 @@ from typing import List, Dict
 from app.core.config import settings
 from rag.vectorstore import search_similar, store_documents, needs_more_research
 from ingestion.pubmed import fetch_research
+from ingestion.pedro import fetch_pedro_research
 from models.schemas import PTInput, TreatmentPlanOutput, Citation, ExerciseItem, ManualTherapyItem, SpecialTest
 
 client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
@@ -20,10 +21,14 @@ def build_query(pt_input: PTInput) -> str:
 def build_prompt(pt_input: PTInput, evidence: List[Dict]) -> str:
     evidence_text = ""
     for i, doc in enumerate(evidence, 1):
+        source = doc.get("source", "PubMed")
+        evidence_level = doc.get("evidence_level", "standard")
         evidence_text += f"""
 [{i}] Title: {doc['title']}
 Authors: {', '.join(doc['authors']) if doc['authors'] else 'Unknown'}
 Year: {doc['year']}
+Source: {source}
+Evidence Level: {evidence_level}
 URL: {doc['url']}
 Abstract: {doc['abstract']}
 ---
@@ -33,6 +38,7 @@ Abstract: {doc['abstract']}
 You must ONLY make recommendations that are directly supported by the provided research evidence.
 You must NEVER hallucinate or invent medical recommendations without citation.
 If the retrieved evidence is not relevant to the diagnosis, say so clearly.
+When citing evidence, prioritize systematic reviews and RCTs over lower quality evidence.
 
 PATIENT ASSESSMENT:
 - Diagnosis: {pt_input.diagnosis}
@@ -44,7 +50,7 @@ PATIENT ASSESSMENT:
 - Tenderness to Palpation: {', '.join(pt_input.tenderness_to_palpation) if pt_input.tenderness_to_palpation else 'Not specified'}
 - Constraints: {', '.join(pt_input.constraints) if pt_input.constraints else 'None'}
 
-RETRIEVED EVIDENCE:
+RETRIEVED EVIDENCE (ranked by quality):
 {evidence_text}
 
 Based ONLY on the evidence above, generate a structured clinical response in the following JSON format:
@@ -54,7 +60,7 @@ Based ONLY on the evidence above, generate a structured clinical response in the
     "Alternative diagnosis 1 with brief rationale",
     "Alternative diagnosis 2 with brief rationale"
   ],
-  "gold_standard": "A concise 2-3 sentence summary of the current evidence-based gold standard treatment approach for this condition based on the retrieved research, with citation numbers e.g. [1], [2]",
+  "gold_standard": "A concise 2-3 sentence summary of the current evidence-based gold standard treatment approach for this condition based on the retrieved research, prioritizing systematic reviews and RCTs, with citation numbers e.g. [1], [2]",
   "special_tests": [
     {{
       "name": "name of special orthopedic test",
@@ -89,8 +95,8 @@ Based ONLY on the evidence above, generate a structured clinical response in the
       "title": "article title",
       "authors": ["author1", "author2"],
       "year": "year",
-      "url": "pubmed url",
-      "source": "PubMed"
+      "url": "url to article",
+      "source": "PubMed or PEDro"
     }}
   ]
 }}
@@ -99,16 +105,43 @@ Respond with valid JSON only. No additional text. No markdown. No code fences.
 """
 
 
+def dynamic_ingest(diagnosis: str) -> None:
+    """Fetch research from both PubMed and PEDro for an unknown condition."""
+    print(f"Dynamic ingestion from PubMed and PEDro for: {diagnosis}")
+
+    # Fetch from PubMed
+    try:
+        pubmed_articles = fetch_research(
+            diagnosis + " physical therapy rehabilitation treatment",
+            max_results=8
+        )
+        if pubmed_articles:
+            store_documents(pubmed_articles, query_term=diagnosis)
+            print(f"Stored {len(pubmed_articles)} PubMed articles")
+    except Exception as e:
+        print(f"PubMed ingestion error: {e}")
+
+    # Fetch from PEDro
+    try:
+        pedro_articles = fetch_pedro_research(
+            diagnosis + " physiotherapy",
+            max_results=8
+        )
+        if pedro_articles:
+            store_documents(pedro_articles, query_term=diagnosis)
+            print(f"Stored {len(pedro_articles)} PEDro articles")
+    except Exception as e:
+        print(f"PEDro ingestion error: {e}")
+
+
 def run_rag_pipeline(pt_input: PTInput) -> TreatmentPlanOutput:
     query = build_query(pt_input)
     print(f"Searching for evidence: {query}")
 
+    # Dynamic ingestion from both sources if insufficient research found
     if needs_more_research(query):
-        print(f"Insufficient research found — fetching from PubMed for: {pt_input.diagnosis}")
-        fresh_articles = fetch_research(pt_input.diagnosis + " physical therapy treatment", max_results=8)
-        if fresh_articles:
-            store_documents(fresh_articles, query_term=pt_input.diagnosis)
-            print(f"Dynamically ingested {len(fresh_articles)} new articles")
+        print(f"Insufficient research — fetching from PubMed and PEDro for: {pt_input.diagnosis}")
+        dynamic_ingest(pt_input.diagnosis)
 
     evidence = search_similar(query, match_count=5)
     print(f"Retrieved {len(evidence)} evidence documents")
