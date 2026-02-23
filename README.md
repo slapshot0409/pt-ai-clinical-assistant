@@ -2,6 +2,11 @@
 
 An AI-powered Physical Therapy Clinical Decision Support System that generates evidence-based treatment plans using Retrieval-Augmented Generation (RAG) from trusted medical research databases.
 
+## Live Application
+
+- **Frontend:** https://prompt-frontend-ten.vercel.app
+- **Backend:** https://prompt-backend.fly.dev
+
 ## Overview
 
 Physical therapists input patient data and the system retrieves relevant clinical evidence from PubMed, embeds it using Voyage AI, and generates structured, cited clinical recommendations using Claude AI. The system will never hallucinate medical recommendations without evidence citations.
@@ -9,6 +14,7 @@ Physical therapists input patient data and the system retrieves relevant clinica
 ## Features
 
 - **Differential Diagnosis** — lettered list of possible diagnoses with rationale
+- **Evidence-Based Gold Standard** — concise summary of the current gold standard treatment approach based on retrieved research
 - **Recommended Special Tests** — orthopedic tests with procedure, positive findings, and clinical significance
 - **Treatment Plan** — evidence-based narrative with numbered citations
 - **Manual Therapy** — specific techniques with target tissue and rationale
@@ -40,7 +46,7 @@ Physical therapists input patient data and the system retrieves relevant clinica
 ```
 PT Input Form (Next.js)
        ↓
-FastAPI Backend
+FastAPI Backend (Fly.io)
        ↓
 RAG Pipeline
        ↓
@@ -64,6 +70,8 @@ Structured Clinical Output
 | Embeddings | Voyage AI (voyage-large-2) |
 | AI Generation | Anthropic Claude (claude-opus-4-5) |
 | Research API | PubMed NCBI E-utilities |
+| Backend Hosting | Fly.io |
+| Frontend Hosting | Vercel |
 
 ## Project Structure
 ```
@@ -82,10 +90,14 @@ pt-ai-clinical-assistant/
 │   │   ├── embeddings.py       # Voyage AI embedding
 │   │   ├── pipeline.py         # RAG pipeline with dynamic ingestion
 │   │   └── vectorstore.py      # Supabase vector storage and search
+│   ├── Dockerfile              # Docker configuration for Fly.io
+│   ├── fly.toml                # Fly.io deployment configuration
 │   └── main.py                 # FastAPI entry point
 ├── frontend/
-│   └── app/
-│       └── page.tsx            # PT input form and results display
+│   ├── app/
+│   │   └── page.tsx            # PT input form and results display
+│   ├── vercel.json             # Vercel deployment configuration
+│   └── .env.production         # Production environment variables
 ├── scripts/
 │   ├── bulk_ingest.py          # Bulk PubMed ingestion script
 │   ├── test_pubmed.py          # PubMed ingestion test
@@ -130,6 +142,20 @@ Visit `http://localhost:3000`
 | GET | /api/v1/health | Health check |
 | POST | /api/v1/analyze | Submit PT input, receive treatment plan |
 
+## Deployment
+
+### Backend (Fly.io)
+```bash
+cd backend
+flyctl deploy
+```
+
+### Frontend (Vercel)
+```bash
+cd frontend
+vercel --prod
+```
+
 ## Development Phases
 
 - ✅ Phase 1 — GitHub repository and project scaffold
@@ -141,7 +167,7 @@ Visit `http://localhost:3000`
 - ✅ Phase 7 — RAG pipeline with Claude AI
 - ✅ Phase 8 — Frontend/backend integration
 - ✅ Phase 9 — Bulk research ingestion and dynamic fetching
-- ⬜ Phase 10 — Deployment
+- ✅ Phase 10 — Production deployment (Fly.io + Vercel)
 
 ## License
 
