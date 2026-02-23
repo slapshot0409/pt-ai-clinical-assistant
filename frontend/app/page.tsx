@@ -1,5 +1,6 @@
 "use client";
 import { useState } from "react";
+import { useUser, SignOutButton } from "@clerk/nextjs";
 
 const initialForm = {
   symptoms: "",
@@ -15,6 +16,7 @@ const initialForm = {
 const LETTERS = ["A", "B", "C", "D", "E", "F"];
 
 export default function Home() {
+  const { user } = useUser();
   const [form, setForm] = useState(initialForm);
   const [result, setResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
@@ -56,11 +58,28 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-gray-50 py-12 px-4">
       <div className="max-w-3xl mx-auto">
-        <div className="mb-8 text-center">
-          <h1 className="text-4xl font-bold text-blue-700">promPT</h1>
-          <p className="mt-2 text-gray-600">AI-powered Physical Therapy Clinical Decision Support</p>
+
+        {/* Header */}
+        <div className="mb-8 flex items-center justify-between">
+          <div>
+            <h1 className="text-4xl font-bold text-blue-700">promPT</h1>
+            <p className="mt-1 text-gray-600">AI-powered Physical Therapy Clinical Decision Support</p>
+          </div>
+          <div className="flex items-center gap-4">
+            {user && (
+              <span className="text-sm text-gray-500">
+                {user.emailAddresses[0]?.emailAddress}
+              </span>
+            )}
+            <SignOutButton>
+              <button className="text-sm text-white bg-gray-400 hover:bg-gray-500 px-4 py-2 rounded-lg transition">
+                Sign Out
+              </button>
+            </SignOutButton>
+          </div>
         </div>
 
+        {/* Input Form */}
         <div className="bg-white rounded-2xl shadow p-8 mb-8">
           <h2 className="text-xl font-semibold text-gray-800 mb-6">Patient Assessment Input</h2>
           <div className="space-y-6">
@@ -138,7 +157,7 @@ export default function Home() {
           <div className="bg-white rounded-2xl shadow p-8 space-y-8">
             <h2 className="text-xl font-semibold text-blue-700">Clinical Decision Support</h2>
 
-            {/* Differential Diagnosis - lettered */}
+            {/* Differential Diagnosis */}
             <div>
               <h3 className="font-semibold text-gray-800 mb-3">Differential Diagnosis</h3>
               <ol className="space-y-2">
