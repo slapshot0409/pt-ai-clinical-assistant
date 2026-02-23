@@ -2,7 +2,8 @@ import anthropic
 import json
 from typing import List, Dict
 from app.core.config import settings
-from rag.vectorstore import search_similar
+from rag.vectorstore import search_similar, store_documents, needs_more_research
+from ingestion.pubmed import fetch_research
 from models.schemas import PTInput, TreatmentPlanOutput, Citation, ExerciseItem, ManualTherapyItem, SpecialTest
 
 client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
@@ -104,6 +105,15 @@ def run_rag_pipeline(pt_input: PTInput) -> TreatmentPlanOutput:
 
     query = build_query(pt_input)
     print(f"Searching for evidence: {query}")
+
+    # Dynamic ingestion — if we don't have enough relevant research, fetch it now
+    if needs_more_research(query):
+        print(f"Insufficient research found — fetching from PubMed for: {pt_input.diagnosis}")
+        fresh_articles = fetch_research(pt_input.diagnosis + " physical therapy treatment", max_results=8)
+        if fresh_articles:
+            store_documents(fresh_articles, query_term=pt_input.diagnosis)
+            print(f"Dynamically ingested {len(fresh_articles)} new articles")
+
     evidence = search_similar(query, match_count=5)
     print(f"Retrieved {len(evidence)} evidence documents")
 
