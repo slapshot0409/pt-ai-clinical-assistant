@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from app.api.analyze import router as analyze_router
 
 app = FastAPI(
     title="promPT",
@@ -19,3 +20,6 @@ app.add_middleware(
 @app.get("/api/v1/health")
 async def health_check():
     return {"status": "ok", "app": "promPT", "version": "0.1.0"}
+
+
+app.include_router(analyze_router, prefix="/api/v1")

@@ -3,7 +3,7 @@ import json
 from typing import List, Dict
 from app.core.config import settings
 from rag.vectorstore import search_similar
-from models.schemas import PTInput, TreatmentPlanOutput, Citation, ExerciseItem
+from models.schemas import PTInput, TreatmentPlanOutput, Citation, ExerciseItem, ManualTherapyItem, SpecialTest
 
 client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
 
@@ -11,7 +11,7 @@ client = anthropic.Anthropic(api_key=settings.ANTHROPIC_API_KEY)
 def build_query(pt_input: PTInput) -> str:
     """Build a search query from PT input."""
     return (
-        f"{pt_input.injury} {pt_input.diagnosis} "
+        f"{pt_input.diagnosis} "
         f"{pt_input.healing_stage.value} stage rehabilitation "
         f"{' '.join(pt_input.symptoms)}"
     )
@@ -33,34 +33,57 @@ Abstract: {doc['abstract']}
     return f"""You are an expert Physical Therapy clinical decision support AI.
 You must ONLY make recommendations that are directly supported by the provided research evidence.
 You must NEVER hallucinate or invent medical recommendations without citation.
+If the retrieved evidence is not relevant to the diagnosis, say so clearly.
 
 PATIENT ASSESSMENT:
-- Injury: {pt_input.injury}
 - Diagnosis: {pt_input.diagnosis}
 - Symptoms: {', '.join(pt_input.symptoms)}
 - Stage of Healing: {pt_input.healing_stage.value}
 - Functional Limitations: {', '.join(pt_input.functional_limitations)}
 - Pain Level: {pt_input.pain_level}/10
+- Pain with Movement: {', '.join(pt_input.pain_with_movement) if pt_input.pain_with_movement else 'Not specified'}
+- Tenderness to Palpation: {', '.join(pt_input.tenderness_to_palpation) if pt_input.tenderness_to_palpation else 'Not specified'}
 - Constraints: {', '.join(pt_input.constraints) if pt_input.constraints else 'None'}
 
 RETRIEVED EVIDENCE:
 {evidence_text}
 
-Based ONLY on the evidence above, generate a structured treatment plan in the following JSON format:
+Based ONLY on the evidence above, generate a structured clinical response in the following JSON format:
 {{
-  "treatment_plan": "detailed narrative treatment plan with evidence references",
+  "differential_diagnosis": [
+    "Most likely diagnosis with brief rationale",
+    "Alternative diagnosis 1 with brief rationale",
+    "Alternative diagnosis 2 with brief rationale"
+  ],
+  "special_tests": [
+    {{
+      "name": "name of special orthopedic test",
+      "procedure": "step by step description of how to perform the test",
+      "positive_finding": "what a positive result looks like",
+      "indicates": "what a positive result suggests"
+    }}
+  ],
+  "treatment_plan": "detailed narrative treatment plan with evidence references by number e.g. [1], [2]",
+  "manual_therapy": [
+    {{
+      "technique": "name of manual therapy technique",
+      "target": "target tissue or joint",
+      "rationale": "brief rationale based on evidence"
+    }}
+  ],
   "exercise_protocol": [
     {{
       "name": "exercise name",
+      "description": "step by step instructions for how to perform the exercise",
       "sets": "number of sets",
-      "reps": "number of reps",
-      "frequency": "how often",
-      "notes": "any special notes"
+      "reps": "number of reps or duration",
+      "frequency": "how often per day or week",
+      "notes": "any progressions, modifications, or special instructions"
     }}
   ],
   "progression_criteria": ["criterion 1", "criterion 2"],
   "contraindications": ["contraindication 1", "contraindication 2"],
-  "recovery_timeline": "expected recovery timeline narrative",
+  "recovery_timeline": "expected recovery timeline narrative based only on current patient",
   "citations": [
     {{
       "title": "article title",
@@ -79,13 +102,11 @@ Respond with valid JSON only. No additional text. No markdown. No code fences.
 def run_rag_pipeline(pt_input: PTInput) -> TreatmentPlanOutput:
     """Run the full RAG pipeline and return a structured treatment plan."""
 
-    # Step 1: Build search query and retrieve evidence
     query = build_query(pt_input)
     print(f"Searching for evidence: {query}")
     evidence = search_similar(query, match_count=5)
     print(f"Retrieved {len(evidence)} evidence documents")
 
-    # Step 2: Build prompt and call Claude
     prompt = build_prompt(pt_input, evidence)
     print("Calling Claude API...")
 
@@ -95,11 +116,9 @@ def run_rag_pipeline(pt_input: PTInput) -> TreatmentPlanOutput:
         messages=[{"role": "user", "content": prompt}]
     )
 
-    # Step 3: Parse response
     response_text = message.content[0].text
     print(f"Raw response preview: {response_text[:200]}")
 
-    # Strip markdown code fences if present
     clean = response_text.strip()
     if clean.startswith("```"):
         clean = clean.split("```")[1]
@@ -109,9 +128,11 @@ def run_rag_pipeline(pt_input: PTInput) -> TreatmentPlanOutput:
 
     data = json.loads(clean)
 
-    # Step 4: Build structured output
     return TreatmentPlanOutput(
+        differential_diagnosis=data["differential_diagnosis"],
+        special_tests=[SpecialTest(**t) for t in data["special_tests"]],
         treatment_plan=data["treatment_plan"],
+        manual_therapy=[ManualTherapyItem(**m) for m in data["manual_therapy"]],
         exercise_protocol=[ExerciseItem(**e) for e in data["exercise_protocol"]],
         progression_criteria=data["progression_criteria"],
         contraindications=data["contraindications"],
