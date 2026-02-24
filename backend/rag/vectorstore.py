@@ -5,8 +5,8 @@ from rag.embeddings import embed_texts, embed_query
 
 supabase = create_client(settings.SUPABASE_URL, settings.SUPABASE_KEY)
 
-SIMILARITY_THRESHOLD = 0.3
-MIN_RESULTS = 2
+SIMILARITY_THRESHOLD = 0.5
+MIN_RESULTS = 3
 
 EVIDENCE_LEVEL_PRIORITY = {
     "systematic_review": 4,
